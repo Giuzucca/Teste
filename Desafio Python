@@ -1,0 +1,26 @@
+"""
+Desafio Python: Crie um Script que utilize a API pública JSONPlaceholder (https://jsonplaceholder.typicode.com/) para buscar e
+#exibir os dados de usuários. Manipule os dados para apresentar apenas os nomes e e-mails dos usuários
+
+"""
+
+import requests
+
+link = 'https://jsonplaceholder.typicode.com/comments'
+
+requisicao = requests.get(link)
+dicionario = requisicao.json()
+
+lista = []
+indice = 0
+
+while indice < len(dicionario):
+    nome = dicionario[indice]["name"]
+    email = dicionario[indice]["email"]
+    print(f"NOME: {nome}")
+    print(f"EMAIL: {email}")
+    lista.append(nome)
+    lista.append(email)
+    indice += 1
+
+print(lista)
