@@ -1,0 +1,40 @@
+import openpyxl
+from PIL import Image, ImageDraw, ImageFont
+
+# Abrir a planilha
+workbook_clientes = openpyxl.load_workbook('planilha_avaliacao.xlsx')
+plan_clientes = workbook_clientes['Plan1']
+
+# Começar a ler a partir da segunda linha do excel
+for indice, linha in enumerate(plan_clientes.iter_rows(min_row=2)):
+    # cada célula que contém a info que precisamos
+    nome_cliente = linha[0].value # Nome do cliente
+    tipo_imovel = linha[1].value # Tipo do imóvel
+    nome_endereco = linha[2].value # Endereço do imóvel
+    data_avaliacao = linha[3].value # Data da avaliação
+    area_total = linha[4].value  # Área total
+    area_construida = linha[5].value # Área construída
+    status_documentacao = linha[6].value # Status Documentação
+    preco_venda = linha[7].value # Preço de venda
+
+# Transferir os dados da planilha para a imagem do certificado:
+
+# importar fontes (bd negrito)
+    # definindo a fonte a ser usada
+    fonte_nome = ImageFont.truetype('./tahomabd.ttf',20)
+    fonte_geral = ImageFont.truetype('./tahoma.ttf',15)
+    fonte_avaliacao = ImageFont.truetype('./tahoma.ttf',20)
+
+    image = Image.open('./avaliacao_padrao.jpg')
+    desenhar = ImageDraw.Draw(image)
+
+    desenhar.text((170,200),nome_cliente,fill='black',font=fonte_nome)
+    desenhar.text((195,245),tipo_imovel,fill='black',font=fonte_geral)
+    desenhar.text((215,288),nome_endereco,fill='black',font=fonte_geral)
+    desenhar.text((780,630),str(data_avaliacao),fill='black',font=fonte_geral)
+    desenhar.text((230,410),area_total,fill='black',font=fonte_geral)
+    desenhar.text((280,452),area_construida, fill='black',font=fonte_geral)
+    desenhar.text((265,535),status_documentacao, fill='black', font=fonte_geral)
+    desenhar.text((320,620),repr(preco_venda),fill='black',font=fonte_avaliacao)
+
+    image.save(f'./{indice} {nome_cliente} avaliacao.png')
