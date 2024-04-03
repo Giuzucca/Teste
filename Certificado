@@ -1,0 +1,54 @@
+"""
+Tenho uma planilha no excel com os dados dos alunos que fizeram um curso
+
+Quero ver a possibilidade de criar um programa usando python para automatizar enviando os dados da planilha para
+preencher os campos mutaveis do certificado padrão
+
+Tipo nome do curso, nome participante, tipo de participação, data do inicio, data do final, carga horaria, data da
+emissão do certificado e as assinaturas do Gestor Geral, do coordenador.
+
+# Pegar os dados da planilha, conforme acima:
+
+# Transferir os dados da planilha para a imagem do certificado:
+
+"""
+
+import openpyxl
+from PIL import Image, ImageDraw, ImageFont
+
+# Abrir a planilha
+workbook_alunos = openpyxl.load_workbook('planilha_alunos.xlsx')
+sheet_alunos = workbook_alunos['Sheet1']
+
+# Começar a ler a partir da segunda linha do excel
+for indice, linha in enumerate(sheet_alunos.iter_rows(min_row=2)):
+    # cada célula que contém a info que precisamos
+    nome_curso = linha[0].value # Nome do curso
+    nome_participante = linha[1].value # Nome do participante
+    tipo_participacao = linha[2].value # Tipo participação
+    data_inicio = linha[3].value # Data de inicio
+    data_final = linha[4].value  # Data de final
+    carga_horaria = linha[5].value # Carga horaria
+    data_emissao = linha[6].value # Data emissão
+
+# Transferir os dados da planilha para a imagem do certificado:
+
+# importar fontes (bd negrito)
+    # definindo a fonte a ser usada
+    fonte_nome = ImageFont.truetype('./tahomabd.ttf',90)
+    fonte_geral = ImageFont.truetype('./tahoma.ttf',80)
+    fonte_data = ImageFont.truetype('./tahoma.ttf',55)
+
+    image = Image.open('./certificado_padrao.jpg')
+    desenhar = ImageDraw.Draw(image)
+
+    desenhar.text((1020,827),nome_participante,fill='black',font=fonte_nome)
+    desenhar.text((1070,955),nome_curso,fill='black',font=fonte_geral)
+    desenhar.text((1440,1070),tipo_participacao,fill='black',font=fonte_geral)
+    desenhar.text((1500,1190),str(carga_horaria),fill='black',font=fonte_geral)
+
+    desenhar.text((750,1770),data_inicio,fill='black',font=fonte_data)
+    desenhar.text((750,1930),data_final, fill='black',font=fonte_data)
+    desenhar.text((2220,1930),data_emissao,fill='black',font=fonte_data)
+
+    image.save(f'./{indice} {nome_participante} certificado.png')
