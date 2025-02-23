@@ -16,12 +16,13 @@ jobs:
    build:
        runs-on: ubuntu-latest
 
-       # Runs a single command using the runners shell
-      - name: Build
-        run: echo "Build"
+      steps:
+      
+        - name: Build
+          run: echo "Build"
 
-      - name: Test
-        run: echo "Test"
-
-      - name: Deploy
-        run: echo "Deploy"
+        - name: Test
+          run: echo "Test"
+  
+        - name: Deploy
+          run: echo "Deploy"
