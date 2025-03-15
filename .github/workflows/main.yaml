@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
 
-    steps:  
+    steps:  # Indentação corrigida
       - name: Test
         uses: Giuzucca/Teste@main
         with:
