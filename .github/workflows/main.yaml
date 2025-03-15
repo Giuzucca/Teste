@@ -21,9 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
 
-    steps:  # Indentation fixed here
+  steps:
       - name: Test
-        uses: giuzucca/teste@main
+        uses: Giuzucca/Teste@main
         with:
           a: 1
           b: 2
