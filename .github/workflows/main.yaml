@@ -23,7 +23,7 @@ jobs:
 
     steps:  # Indentação corrigida
       - name: Test
-        uses: Giuzucca/Teste@main
+        uses: giuzucca/teste@main
         with:
           a: 1
           b: 2
