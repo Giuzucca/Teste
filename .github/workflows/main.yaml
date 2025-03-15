@@ -23,8 +23,11 @@ jobs:
 
     steps:  # Indentation fixed here
       - name: Test
-        run: echo "Test"
-
+        uses: Giuzucca/Teste@main
+        with:
+          a: 1
+          b: 2
+        
   deploy:
     runs-on: ubuntu-latest
     needs: test
