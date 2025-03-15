@@ -1,0 +1,269 @@
+    # This is a basic workflow to help you get started with Actions
+
+name: CI
+
+on:
+  push:
+    branches: [ devsecops ]
+
+permissions:
+  contents: read
+  security-events: write
+  issues: write
+
+# Allows you to run this workflow manually from the Actions tab
+# workflow_dispatch:
+
+jobs:
+  sast:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: 🛠 Checkout do Código
+        uses: actions/checkout@v3
+
+      - name: 🛠 Adicionar repositório do Docker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo tee /etc/apt/keyrings/docker.asc > /dev/null
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu
+                sudo apt-get update
+
+      - name: 📌 Listar versões disponíveis do Docker
+        run: apt-cache madison docker-ce
+
+      - name: 📌 Instalar Docker versão 22 manualmente
+        run: |
+          sudo apt-get install -y docker-ce=5:20.10.13~3-0~ubuntu-focal \
+            docker-ce-cli=5:20.10.13~3-0~ubuntu-focal \
+            containerd.io --allow-downgrades
+          sudo apt-mark hold docker-ce docker-ce-cli containerd.io
+
+      - name: 🏗 Verificar versão final do Docker instalada
+        run: docker --version
+
+      - name: Horusec
+        run: |
+          mkdir reports
+          docker run -v /var/run/docker.sock:/var/run/docker.sock -v $(pwd)/src:/horusec horuszup/horusec-cli:latest horusec start -p /src
+
+      - name: Archive horusec report
+        uses: actions/upload-artifact@v4
+        with:
+          name: horusec_report
+          path: reports/horusec_report.sarif
+
+      # - name: Create GitHub Issue if Vulnerabilities Found
+      #   run: |
+      #     VULNERABILITIES=$(jq '[.runs[].results | length] | add' reports/horusec_report.sarif || echo 0)
+      #     echo "Total vulnerabilities detected: $VULNERABILITIES"
+      # if [ "$VULNERABILITIES" -gt 0 ]; then
+      #   gh issue create \
+      #     --title "🚨 Horusec Security Scan Found $VULNERABILITIES Issues" \
+      #     --body "O scanner de segurança detectou **$VULNERABILITIES** vulnerabilidades.\n\nVerifique" \
+      #     --label "security" \
+      #     --repo ${{ github.repository }}
+      # fi
+      # env:
+      #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🔍 Analisar SARIF e bloquear pipeline se houver vulnerabilidades
+        continue-on-error: true
+        run: |
+          VULNERABILITIES=$(jq '[.runs[].results | length] | add' reports/horusec_report.sarif || echo 0)
+          echo "Total vulnerabilities detected: $VULNERABILITIES"
+
+          if [ "$VULNERABILITIES" -gt 0 ]; then
+            echo "❌ Security Gate: Vulnerabilities found! Blocking pipeline."
+            exit 1
+          fi
+
+      # - name: Upload SARIF results to GitHub Security Tab
+      #   uses: github/codeql-action/upload-sarif@v3
+      #   with:
+      #     sarif_file: reports/horusec_report.sarif
+      #     category: "horusec"
+      #     checkout_path: ${{ github.workspace }}
+
+      - name: Ensure 'security' label exists
+        run: |
+          gh label create "security" --description "Security vulnerabilities" --color FF0000 || echo "Label already exists"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Executar Semgrep e salvar JSON
+        run: |
+          pip install semgrep
+          semgrep scan --config="p/owasp-top-ten" --json > semgrep-results.json || true
+
+      - name: Salvar resultado como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep-results.json
+          
+      - name: ⚒️ Checkout do Código
+        uses: actions/checkout@v3
+
+      - name: Dependency Check
+        uses: dependency-check/Dependency-check_Action@main
+        with:
+          project: 'test'
+          path: '.'
+
+      format: 'HTML'
+          out: 'reports'
+          args: |
+            --nvdApiKey ${{ secrets.DC_KEY }}
+            --enableExperimental
+
+      - name: Upload Iac results
+        uses: actions/upload-artifact@master
+        with:
+          name: 💾 IAC report
+          path: ${{github.workspace}}/reports
+
+      iac:
+        runs-on: ubuntu-20.04
+        needs: sca
+        steps:
+
+        - name: ⚒️ Checkout do Código
+          uses: actions/checkout@v3
+
+        - name: run kics Scan
+          uses: checkmarx/kics-github-action@v2.1.4
+          with:
+            path: '.'
+            ignore_on_exit: results
+            output_path: reports/
+
+        - name: Upload Dependency Check results
+          uses: actions/upload-artifact@master
+       with:
+         name: Depcheck report
+         path: ${{github.workspace}}/reports
+
+      deploy-hml:
+       runs-on: ubuntu-20.04
+       needs: iac
+       steps:
+
+       - name: ⚒️ Checkout do Código
+         uses: actions/checkout@v3
+
+       - name: Configurar variáveis
+         run: |
+           echo "IMAGE_NAME=meu-app" >> $GITHUB_ENV
+           echo "DOCKER_HUB_USERNAME=${{ secrets.DOCKER_HUB_USERNAME }}" >> $GITHUB_ENV
+
+       - name: Login no Docker Hub
+         run: |
+           echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
+
+       - name: Construir e push da imagem
+         run: |
+           docker build -t "$DOCKER_HUB_USERNAME/$IMAGE_NAME:latest" .
+           docker push "$DOCKER_HUB_USERNAME/$IMAGE_NAME:latest"
+
+       - name: Deploy APP
+         uses: appleboy/ssh-action@v0.1.10
+         with:
+           host: ${{ secrets.AWS_SERVER_IP }}
+           username: ubuntu
+           key: ${{ secrets.SSH_PRIVATE_KEY }}
+           script: |
+             IMAGE_NAME=meu-app
+             docker push "$DOCKER_HUB_USERNAME/$IMAGE_NAME:latest"
+
+      - name: Deploy APP
+       uses: appleboy/ssh-action@v0.1.10
+       with:
+         host: ${{ secrets.AWS_SERVER_IP }}
+         username: ubuntu
+         key: ${{ secrets.SSH_PRIVATE_KEY }}
+         script: |
+           IMAGE_NAME=meu-app
+           
+           docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" -p "${{ secrets.DOCKER_HUB_PASSWORD }}"
+           docker pull "${{ secrets.DOCKER_HUB_USERNAME }}/$IMAGE_NAME:latest"
+           
+           echo "Verificando se o container já existe..."
+           if [ "$(docker ps -aq -f name=meu-app)" ]; then
+             echo "Parando e removendo container existente..."
+             docker stop meu-app
+             docker rm meu-app
+           else
+             echo "Nenhum container existente encontrado."
+           fi
+           
+           echo "Iniciando novo container..."
+           docker run -d --name meu-app -p 80:80 "${{ secrets.DOCKER_HUB_USERNAME }}/$IMAGE_NAME:latest"
+      
+      
+      dast:
+       runs-on: ubuntu-20.04
+       needs: deploy-hml
+       steps:
+      
+       - name: Nuclei - Vulnerability Scan
+         uses: projectdiscovery/nuclei-action@main
+           with:
+             target: ${{secrets.AWS_SERVER_IP}}
+             github-report: true
+             github-token: ${{ secrets.GITHUB_TOKEN }}
+        
+         - name: GitHub Security Dashboard Alerts update
+           uses: github/codeql-action/upload-sarif@v3
+           with:
+             sarif_file: nuclei.sarif
+        
+         - name: ZAP Scan
+           uses: zaproxy/action-full-scan@v0.12.0
+           with:
+             target: 'http://${{ secrets.AWS_SERVER_IP }}:80'
+        
+        deploy-prd:
+         runs-on: ubuntu-20.04
+         needs: dast
+         steps:
+        
+         - name: ⚒️ Checkout do Código
+           uses: actions/checkout@v3
+        
+         - name: Configurar variáveis
+           run: |
+             echo "IMAGE_NAME=meu-app" >> $GITHUB_ENV
+             echo "DOCKER_HUB_USERNAME=${{ secrets.DOCKER_HUB_USERNAME }}" >> $GITHUB_ENV
+        
+         - name: Login no Docker Hub
+           run: |
+             echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
+
+         - name: Construir e push da imagem
+           run: |
+             docker build -t "$DOCKER_HUB_USERNAME/$IMAGE_NAME:latest" .
+             docker push "$DOCKER_HUB_USERNAME/$IMAGE_NAME:latest"
+          
+          - name: Deploy APP
+           uses: appleboy/ssh-action@v0.1.10
+           with:
+             host: ${{ secrets.AWS_SERVER_IP }}
+             username: ubuntu
+             key: ${{ secrets.SSH_PRIVATE_KEY }}
+             script: |
+               IMAGE_NAME=meu-app
+               docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" -p "${{ secrets.DOCKER_HUB_PASSWORD }}"
+               docker pull "${{ secrets.DOCKER_HUB_USERNAME }}/$IMAGE_NAME:latest"
+               
+               echo "Verificando se o container já existe..."
+               if [ "$(docker ps -aq -f name=meu-app)" ]; then
+                 echo "Parando e removendo container existente..."
+                 docker stop meu-app
+                 docker rm meu-app
+               else
+                 echo "Nenhum container existente encontrado."
+               fi
+               
+               echo "Iniciando novo container..."
+               docker run -d --name meu-app -p 80:80 "${{ secrets.DOCKER_HUB_USERNAME }}/$IMAGE_NAME:latest"
