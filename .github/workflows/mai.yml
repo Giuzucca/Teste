@@ -1,4 +1,4 @@
-name: Checkmarx One Scan With Github
+name: Checkmarx One Scan
 on:
 push:
 branches:
