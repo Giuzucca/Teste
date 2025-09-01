@@ -19,3 +19,4 @@ jobs:
           base_uri: https://eu.ast.checkmarx.net
           cx_client_id: ${{ secrets.CX_test_github }}
           cx_client_secret: ${{ secrets.CX_SECRET_test_github }}
+          creat_project: false
